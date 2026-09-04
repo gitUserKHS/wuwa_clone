@@ -1,0 +1,70 @@
+# Unity generated
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+/Assets/AssetStoreTools*
+/Assets/Plugins/Editor/JetBrains*
+.consulo/
+*.csproj
+*.unityproj
+*.sln
+*.slnx
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+sysinfo.txt
+*.apk
+*.aab
+*.unitypackage
+*.app
+crashlytics-build.properties
+.vs/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# project: captures, save snapshots
+/Screenshots/
+/Assets/Screenshots/
+/Assets/Screenshots.meta
+/_savebak/
+
+# Claude Code session files
+/.claude/
+
+# Asset Store packs: not redistributable (Asset Store EULA). Import them from the
+# Asset Store into these exact folders; see README "서드파티 에셋".
+/Assets/Kevin Iglesias/
+/Assets/Kevin Iglesias.meta
+/Assets/ExplosiveLLC/
+/Assets/ExplosiveLLC.meta
+/Assets/Polytope Studio/
+/Assets/Polytope Studio.meta
+/Assets/ithappy/
+/Assets/ithappy.meta
+/Assets/FantasyIconsPackFree/
+/Assets/FantasyIconsPackFree.meta
+/Assets/RPG&Fantasy Mobile GUI/
+/Assets/RPG&Fantasy Mobile GUI.meta
+# clips duplicated from those packs by WuWaAnimBuild (regenerate: BuildAll + AddWuWaStates + ApplySwordPose)
+/Assets/WuWa/Anim/Clips/*
+!/Assets/WuWa/Anim/Clips/Fist.anim
+!/Assets/WuWa/Anim/Clips/Fist.anim.meta

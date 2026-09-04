@@ -1,0 +1,17 @@
+WuWa Clone (데모) — 안내 / Notice
+
+이 프로그램은 명조(Wuthering Waves) 스타일 액션 게임의 학습·포트폴리오용 데모입니다.
+This program is a non-commercial study / portfolio demo of a Wuthering Waves-style action game.
+
+- 소스: https://github.com/gitUserKHS/wuwa_clone
+- 캐릭터 모델: 유니티짱 — © Unity Technologies Japan/UCL (Unity-Chan License 2.0)
+  This software uses "Unity-Chan" assets licensed under the Unity-Chan License 2.0.
+- 애니메이션·환경 에셋: Kevin Iglesias, ExplosiveLLC, Polytope Studio, ithappy 등 Unity Asset Store 에셋
+  (각 에셋의 라이선스는 해당 저작권자에게 있습니다.)
+- Wuthering Waves 및 명조는 KURO GAMES의 상표입니다. 본 데모는 이와 무관한 비상업 팬 프로젝트입니다.
+
+이 프로그램은 "있는 그대로" 제공되며 어떠한 보증도 하지 않습니다.
+This program is provided "as is", without warranty of any kind.
+
+세이브 데이터 위치 / Save data:
+%USERPROFILE%\AppData\LocalLow\DefaultCompany\wuwa_clone
