@@ -281073,7 +281073,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c9f12561c2050fa40bc3b92fa959d620, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WuWa.Critters
-  butterflyCount: 16
   birdCount: 7
   critterShader: {fileID: 4800000, guid: 35dadffa0e4d510498ba67d6adaee5d2, type: 3}
 --- !u!114 &1538488733
