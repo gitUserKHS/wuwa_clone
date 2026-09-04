@@ -60,6 +60,7 @@ namespace WuWa
         readonly Text[] _slotNames = new Text[5];
         Text _costText, _sonataText, _echoDetail;
         RectTransform _ownedGrid;
+        ScrollRect _ownedScroll;
         readonly List<GameObject> _ownedCells = new List<GameObject>();
         Button _enhanceBtn, _tuneBtn, _retuneBtn, _mergeBtn;
 
@@ -240,7 +241,21 @@ namespace WuWa
                 _slotNames[i].rectTransform.pivot = new Vector2(0.5f, 0.5f);
             }
             T(p, "hint", new Vector2(28f, -236f), new Vector2(980f, 22f), "슬롯을 선택하고 아래 에코를 클릭해 장착 · 선택된 슬롯을 다시 클릭하면 해제", 13, UIKit.Theme.TextLo);
-            _ownedGrid = UIKit.Rect("owned", p, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(28f, -266f), new Vector2(650f, 600f));
+            // The owned list runs past any fixed rect after a handful of echoes drop, and a plain
+            // RectTransform neither clips nor scrolls, so everything past ~13 was drawn off-panel.
+            // Same masked scroll view the bag and codex use; RefreshEcho sizes the content by row.
+            var ownedView = UIKit.Img("ownedView", p, new Color(1f, 1f, 1f, 0.03f), null, true);
+            var ovr = ownedView.rectTransform;
+            ovr.anchorMin = ovr.anchorMax = new Vector2(0f, 1f); ovr.pivot = new Vector2(0f, 1f);
+            ovr.anchoredPosition = new Vector2(28f, -266f); ovr.sizeDelta = new Vector2(658f, 600f);
+            ownedView.gameObject.AddComponent<RectMask2D>();
+            _ownedScroll = ownedView.gameObject.AddComponent<ScrollRect>();
+            _ownedScroll.horizontal = false;
+            _ownedScroll.movementType = ScrollRect.MovementType.Clamped;
+            _ownedScroll.scrollSensitivity = 40f;
+            _ownedGrid = UIKit.Rect("owned", ownedView.transform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 600f));
+            _ownedScroll.viewport = ovr;
+            _ownedScroll.content = _ownedGrid;
             var det = UIKit.Panel("det", p, new Color(1f, 1f, 1f, 0.05f), new Vector2(0f, 1f), new Vector2(694f, -262f), new Vector2(316f, 600f));
             _echoDetail = T(det.transform, "det", new Vector2(14f, -12f), new Vector2(290f, 360f), "", 13, UIKit.Theme.TextHi);
             _enhanceBtn = B(det.transform, "enh", new Vector2(14f, -392f), new Vector2(288f, 40f), "-", new Color(0.30f, 0.26f, 0.12f, 1f), () => { var inst = SelInst(); if (inst != null) EchoSystem.I.Enhance(inst.uid); }, 13);
@@ -572,6 +587,8 @@ namespace WuWa
                     col++; if (col >= 2) { col = 0; row++; }
                 }
                 if (es.Instances.Count == 0) _ownedCells.Add(T(_ownedGrid, "none", new Vector2(4f, -8f), new Vector2(600f, 40f), "보유 에코 없음 — 그림자를 정화하면 에코가 남습니다", 14, UIKit.Theme.TextLo).gameObject);
+                int rows = row + (col > 0 ? 1 : 0);
+                _ownedGrid.sizeDelta = new Vector2(0f, Mathf.Max(600f, rows * 92f + 8f));
             }
             RefreshEchoDetail(es);
         }

@@ -181,6 +181,8 @@ namespace WuWa.EditorTools
             eCombo[1] = Dupe(attackPool[2 % attackPool.Count], "E_A2", false);
             BuildEnemyController(dIdle, dRun, eCombo[0], eCombo[1], dHit, dDie, dStagger);
 
+            // the packs' clips carry their own rig heading and travel in their root curves; strip it
+            Debug.Log("[WuWa] root normalise: " + NormalizeClipRoots());
             // members carry a drawn sword: relaxed/guard idles, Speed x Combat loco, right-hand fist
             Debug.Log("[WuWa] sword pose: " + ApplySwordPose());
             // water: procedural tread / breaststroke clips and the Swim blend state
@@ -305,6 +307,166 @@ namespace WuWa.EditorTools
             var st = sm.AddState(name);
             st.motion = clip;
             st.speed = speed;
+        }
+
+        // ---------------------------------------------------------------- root normalisation
+        // Every clip in the packs was authored on its own rig at its own heading, and the FBX
+        // importers kept that heading ("Root Transform Rotation: based upon Original"). Duplicating
+        // the clip bakes those RootQ/RootT curves into the .anim, and changing the clip settings
+        // afterwards does NOT re-bake them, so the offsets survive onto our characters:
+        //   Idle    root yawed 23 deg and pitched 18 deg  -> the enemy stands crooked and hunched
+        //   Run     root travels 0.56 m per loop          -> the body slides off the capsule and snaps back
+        //   E_A1/A2 root yawed 86 deg                     -> the swing comes out sideways
+        //   Stagger root 0.28 m high                      -> the enemy floats above the ground
+        // The fix rewrites the root curves in place: rotation rebased so frame 0 is identity, XZ
+        // flattened (all movement here is code-driven, applyRootMotion is off everywhere), and Y
+        // shifted so the lowest foot over the clip touches the ground. Idempotent — re-running it
+        // finds frame 0 already at identity and the feet already at 0.
+        static readonly string[] AirborneClips = { "Jump", "Fall", "Glide" };
+        static readonly string[] HandAuthoredClips = { "Fist", "Swim", "SwimTread" };
+
+        static AnimationCurve RootCurve(AnimationClip c, string prop)
+        {
+            foreach (var b in AnimationUtility.GetCurveBindings(c))
+                if (b.type == typeof(Animator) && b.propertyName == prop)
+                    return AnimationUtility.GetEditorCurve(c, b);
+            return null;
+        }
+
+        static void SetRootCurve(AnimationClip c, string prop, AnimationCurve curve)
+        {
+            AnimationUtility.SetEditorCurve(c, EditorCurveBinding.FloatCurve("", typeof(Animator), prop), curve);
+        }
+
+        [MenuItem("WuWa/Anim/Normalize clip roots")]
+        public static void NormalizeClipRootsMenu() { Debug.Log(NormalizeClipRoots()); }
+
+        public static string NormalizeClipRoots()
+        {
+            var probePrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/WuWa/Prefabs/Member0.prefab");
+            if (probePrefab == null) return "Member0.prefab missing (needed as the foot probe)";
+            var probe = (GameObject)PrefabUtility.InstantiatePrefab(probePrefab);
+            var sb = new System.Text.StringBuilder();
+            try
+            {
+                probe.transform.position = Vector3.zero;
+                probe.transform.rotation = Quaternion.identity;
+                var anim = probe.GetComponent<Animator>();
+                if (anim == null || !anim.isHuman) return "probe is not humanoid";
+                int done = 0;
+                foreach (var guid in AssetDatabase.FindAssets("t:AnimationClip", new[] { ClipDir }))
+                {
+                    string path = AssetDatabase.GUIDToAssetPath(guid);
+                    var clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(path);
+                    if (clip == null || !clip.humanMotion) continue;
+                    if (System.Array.IndexOf(HandAuthoredClips, clip.name) >= 0) continue;
+                    bool grounded = System.Array.IndexOf(AirborneClips, clip.name) < 0;
+                    string line = NormalizeRoot(clip, anim, probe, grounded);
+                    if (line != null) { sb.Append(line + "\n"); done++; }
+                }
+                sb.Append("normalized " + done + " clips");
+            }
+            finally { UnityEngine.Object.DestroyImmediate(probe); }
+            AssetDatabase.SaveAssets();
+            return sb.ToString();
+        }
+
+        static string NormalizeRoot(AnimationClip clip, Animator anim, GameObject probe, bool grounded)
+        {
+            var qx = RootCurve(clip, "RootQ.x"); var qy = RootCurve(clip, "RootQ.y");
+            var qz = RootCurve(clip, "RootQ.z"); var qw = RootCurve(clip, "RootQ.w");
+            var tx = RootCurve(clip, "RootT.x"); var ty = RootCurve(clip, "RootT.y"); var tz = RootCurve(clip, "RootT.z");
+            if (qx == null || qy == null || qz == null || qw == null || ty == null) return null;
+
+            float fps = clip.frameRate > 1f ? clip.frameRate : 30f;
+            int n = Mathf.Clamp(Mathf.RoundToInt(clip.length * fps) + 1, 2, 600);
+            var q0 = new Quaternion(qx.Evaluate(0f), qy.Evaluate(0f), qz.Evaluate(0f), qw.Evaluate(0f));
+            if (q0.x * q0.x + q0.y * q0.y + q0.z * q0.z + q0.w * q0.w < 1e-6f) q0 = Quaternion.identity;
+            q0.Normalize();
+
+            // Heading reference is the MEAN yaw over the clip, not frame 0. The attack clips turn
+            // the body 100 deg through the swing, and their authored 86 deg offset was what put the
+            // strike itself on the character's forward — rebasing frame 0 would have thrown the
+            // blow sideways instead. Averaging centres the whole swing on forward. Pitch and roll,
+            // by contrast, come from frame 0, so a clip that legitimately falls or leans during
+            // playback (Die, Stagger) still starts upright and keeps the motion.
+            float yawSum = 0f, yawPrev = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                float t = clip.length * i / (n - 1);
+                var qi = new Quaternion(qx.Evaluate(t), qy.Evaluate(t), qz.Evaluate(t), qw.Evaluate(t)).normalized;
+                Vector3 f = qi * Vector3.forward;
+                float yawI = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
+                if (i > 0) yawI = yawPrev + Mathf.DeltaAngle(yawPrev, yawI);      // unwrap across +-180
+                yawPrev = yawI;
+                yawSum += yawI;
+            }
+            float yawAvg = yawSum / n;
+            var e0 = q0.eulerAngles;
+            var qRef = Quaternion.Euler(e0.x, yawAvg, e0.z);
+            var inv = Quaternion.Inverse(qRef);
+            float beforeYaw = yawAvg;
+            float beforePitch = Mathf.DeltaAngle(0f, e0.x);
+            float driftBefore = tx != null && tz != null
+                ? new Vector2(tx.Evaluate(clip.length) - tx.Evaluate(0f), tz.Evaluate(clip.length) - tz.Evaluate(0f)).magnitude : 0f;
+
+            var nx = new AnimationCurve(); var ny = new AnimationCurve(); var nz = new AnimationCurve(); var nw = new AnimationCurve();
+            var prev = Quaternion.identity;
+            for (int i = 0; i < n; i++)
+            {
+                float t = clip.length * i / (n - 1);
+                var q = inv * new Quaternion(qx.Evaluate(t), qy.Evaluate(t), qz.Evaluate(t), qw.Evaluate(t)).normalized;
+                if (i > 0 && Quaternion.Dot(prev, q) < 0f) q = new Quaternion(-q.x, -q.y, -q.z, -q.w);   // no sign flips across keys
+                prev = q;
+                nx.AddKey(t, q.x); ny.AddKey(t, q.y); nz.AddKey(t, q.z); nw.AddKey(t, q.w);
+            }
+            SetRootCurve(clip, "RootQ.x", nx); SetRootCurve(clip, "RootQ.y", ny);
+            SetRootCurve(clip, "RootQ.z", nz); SetRootCurve(clip, "RootQ.w", nw);
+            // in-place: the code drives every metre of movement, so the body must stay over the capsule
+            SetRootCurve(clip, "RootT.x", AnimationCurve.Constant(0f, clip.length, 0f));
+            SetRootCurve(clip, "RootT.z", AnimationCurve.Constant(0f, clip.length, 0f));
+
+            float lift = 0f;
+            if (grounded)
+            {
+                float minFoot = MeasureLowestFoot(clip, anim, probe);
+                if (Mathf.Abs(minFoot) > 0.005f)
+                {
+                    var shifted = new AnimationCurve();
+                    for (int i = 0; i < n; i++)
+                    {
+                        float t = clip.length * i / (n - 1);
+                        shifted.AddKey(t, ty.Evaluate(t) - minFoot);
+                    }
+                    SetRootCurve(clip, "RootT.y", shifted);
+                    lift = -minFoot;
+                }
+            }
+            EditorUtility.SetDirty(clip);
+            float after = grounded ? MeasureLowestFoot(clip, anim, probe) : 0f;
+            return string.Format("{0}: meanYaw {1:F0}->0 pitch0 {2:F0}->0 xzDrift {3:F2}->0 footLift {4:+0.00;-0.00;0} residual {5:F3}",
+                clip.name, beforeYaw, beforePitch, driftBefore, lift, after);
+        }
+
+        static float MeasureLowestFoot(AnimationClip clip, Animator anim, GameObject probe)
+        {
+            var lf = anim.GetBoneTransform(HumanBodyBones.LeftFoot);
+            var rf = anim.GetBoneTransform(HumanBodyBones.RightFoot);
+            var lt = anim.GetBoneTransform(HumanBodyBones.LeftToes);
+            var rt = anim.GetBoneTransform(HumanBodyBones.RightToes);
+            if (lf == null || rf == null) return 0f;
+            float baseY = probe.transform.position.y;
+            float min = float.MaxValue;
+            const int Samples = 16;
+            for (int i = 0; i < Samples; i++)
+            {
+                clip.SampleAnimation(probe, clip.length * i / (Samples - 1f));
+                float y = Mathf.Min(lf.position.y, rf.position.y);
+                if (lt != null) y = Mathf.Min(y, lt.position.y);
+                if (rt != null) y = Mathf.Min(y, rt.position.y);
+                min = Mathf.Min(min, y - baseY);
+            }
+            return min == float.MaxValue ? 0f : min;
         }
 
         // ---------------------------------------------------------------- sword pose

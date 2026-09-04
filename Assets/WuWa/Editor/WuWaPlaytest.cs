@@ -52,6 +52,15 @@ namespace WuWa.EditorTools
             return "playtest queued -> " + outDir;
         }
 
+        /// Enemy scenario: continue the save, park one enemy in front of the player with its AI
+        /// off and step it through every animator state with framed shots and a pose report.
+        public static string RunEnemy(string outDir)
+        {
+            string r = Run(outDir);
+            SessionState.SetString(KeyMode, "enemy");
+            return r + " (enemy)";
+        }
+
         /// Water scenario: continue the save, drop the party into the middle of the lake and walk
         /// through tread / stroke / dash / dive / underwater dash / resurface / exhaustion with
         /// framed shots, screen captures (post-processing, fog) and a state report.
@@ -105,7 +114,9 @@ namespace WuWa.EditorTools
 
             // settle: let the scene stream in and the animators reach a steady state
             if (frame < 500) return;
-            if (SessionState.GetString(KeyMode, "") == "swim") { SwimUpdate(dir, frame - 500); return; }
+            string mode = SessionState.GetString(KeyMode, "");
+            if (mode == "swim") { SwimUpdate(dir, frame - 500); return; }
+            if (mode == "enemy") { EnemyUpdate(dir, frame - 500); return; }
 
             var team = Object.FindFirstObjectByType<TeamManager>();
             if (team == null)
@@ -231,6 +242,76 @@ namespace WuWa.EditorTools
                 Report.Add(slot + ": run" + (phase == 700 ? "A" : "B") + " " + GripReport(m) + " tipY=" + BladeTipHeight(m).ToString("F2"));
                 if (phase == 760) PlayerController.SpeedPoseOverride = -1f;
             }
+        }
+
+        static GameObject _enemy;
+        static readonly string[] EnemyStates = { "Idle", "Move", "A1", "A2", "Hit", "Stagger", "Die" };
+
+        static void EnemyUpdate(string dir, int f)
+        {
+            var pc = PlayerController.Instance;
+            if (pc == null) { Finish(dir, "no PlayerController"); return; }
+            if (f == 0)
+            {
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/WuWa/Prefabs/EnemyMob.prefab");
+                if (prefab == null) { Finish(dir, "no EnemyMob prefab"); return; }
+                Vector3 at = pc.transform.position + pc.transform.forward * 4f;
+                at.y = WorldRegions.HeightAt(at.x, at.z);
+                _enemy = Object.Instantiate(prefab, at, Quaternion.LookRotation(-pc.transform.forward, Vector3.up));
+                var ai = _enemy.GetComponent<EnemyAI>();
+                if (ai != null) ai.enabled = false;                 // hold the pose; no chasing
+                var cc = _enemy.GetComponent<CharacterController>();
+                if (cc != null) cc.enabled = false;                 // and no gravity drift
+                // the front shot sits where the enemy is looking, which is where the player stands,
+                // so park the player well off to the side first
+                var pcc = pc.GetComponent<CharacterController>();
+                if (pcc != null) pcc.enabled = false;
+                Vector3 away = pc.transform.position - pc.transform.right * 18f;
+                away.y = WorldRegions.HeightAt(away.x, away.z) + 0.4f;
+                pc.transform.position = away;
+                if (pcc != null) pcc.enabled = true;
+                Report.Add("enemy: " + prefab.name + " at " + at.ToString("F1") + " ground=" + WorldRegions.HeightAt(at.x, at.z).ToString("F2"));
+                return;
+            }
+            if (_enemy == null) return;
+            var anim = _enemy.GetComponentInChildren<Animator>();
+            if (anim == null) { Finish(dir, "enemy has no Animator"); return; }
+
+            int step = (f - 60) / 200, phase = (f - 60) % 200;
+            if (f < 60 || step >= EnemyStates.Length)
+            {
+                if (step >= EnemyStates.Length) { Object.Destroy(_enemy); _enemy = null; Finish(dir, "ok"); }
+                return;
+            }
+            string st = EnemyStates[step];
+            if (phase == 0) anim.Play(st, 0, 0f);
+            else if (phase == 120)
+            {
+                string stem = Path.Combine(dir, "enemy_" + step + "_" + st);
+                Shot(_enemy.transform, stem + "_front.png", 4.2f, 1.6f, 0.9f, 900, 1200);
+                Shot(_enemy.transform, stem + "_side.png", 4.2f, 1.1f, 0.9f, 1100, 900, 90f);
+                Report.Add(EnemyPose(_enemy, st));
+            }
+        }
+
+        /// Yaw of the hip line against the enemy's own forward, how far the hips sit from the
+        /// capsule centre, and how far the lowest foot floats above the enemy's feet plane.
+        static string EnemyPose(GameObject e, string state)
+        {
+            var anim = e.GetComponentInChildren<Animator>();
+            var lf = anim.GetBoneTransform(HumanBodyBones.LeftFoot);
+            var rf = anim.GetBoneTransform(HumanBodyBones.RightFoot);
+            var lu = anim.GetBoneTransform(HumanBodyBones.LeftUpperLeg);
+            var ru = anim.GetBoneTransform(HumanBodyBones.RightUpperLeg);
+            var hips = anim.GetBoneTransform(HumanBodyBones.Hips);
+            if (lf == null || ru == null || hips == null) return state + ": bones missing";
+            Vector3 hipRight = ru.position - lu.position; hipRight.y = 0f;
+            float yaw = hipRight.sqrMagnitude > 1e-6f ? Vector3.SignedAngle(e.transform.right, hipRight.normalized, Vector3.up) : 0f;
+            Vector3 off = e.transform.InverseTransformPoint(hips.position);
+            float foot = Mathf.Min(lf.position.y, rf.position.y) - e.transform.position.y;
+            var info = anim.GetCurrentAnimatorStateInfo(0);
+            return string.Format("{0}: yaw={1:F0}deg hipsOff=({2:F2},{3:F2}) hipsY={4:F2} footClearance={5:F2} playing={6} t={7:F2}",
+                state, yaw, off.x, off.z, off.y, foot, info.IsName(state) ? state : "OTHER", info.normalizedTime);
         }
 
         static void SwimUpdate(string dir, int f)
@@ -461,6 +542,7 @@ namespace WuWa.EditorTools
             PlayerController.DebugSwimDash = false;
             PlayerController.DebugDive = -1;
             InputService.DbgMove = Vector2.zero;
+            if (_enemy != null) { Object.Destroy(_enemy); _enemy = null; }
             SessionState.SetString(KeyMode, "");
             SessionState.SetString(KeyDir, "");
             File.WriteAllText(Path.Combine(dir, "report.txt"),
