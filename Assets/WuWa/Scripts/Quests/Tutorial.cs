@@ -29,7 +29,7 @@ namespace WuWa
             new TutorialCard { id = "grapple", title = "갈고리", body = "{Grapple}로 갈고리 지점에 매달려 이동합니다. 공중에서 {Jump}로 놓습니다." },
             new TutorialCard { id = "glide", title = "활공", body = "공중에서 {Jump} 홀드 = 활공. 스태미나가 다하면 떨어집니다." },
             new TutorialCard { id = "wallrun", title = "벽타기", body = "벽을 향해 달리면 벽을 탑니다. {Jump}로 벽에서 튕겨 나갑니다." },
-            new TutorialCard { id = "swim", title = "수영", body = "물속에서는 스태미나가 계속 줄어듭니다. 다 닳기 전에 뭍으로." },
+            new TutorialCard { id = "swim", title = "수영", body = "수면에서는 스태미나가 계속 줄어듭니다. Ctrl로 잠수하면 물속에서는 산소 걱정 없이 자유롭게 헤엄칠 수 있고 스태미나도 회복됩니다. Space 상승 · Ctrl 하강 · Shift 홀드 대시." },
             new TutorialCard { id = "stamina", title = "스태미나 고갈", body = "스태미나가 바닥나면 질주·활공·벽타기가 끊깁니다. 25% 이상 회복될 때까지 기다리세요." },
             new TutorialCard { id = "levelup", title = "레벨 업", body = "캐릭터 레벨이 올랐습니다. Lv 20 · 30 · 40에서 돌파가 필요합니다 — {Character} 캐릭터 화면." },
             new TutorialCard { id = "chest", title = "보물 상자", body = "나무 상자는 이틀 뒤 다시 채워집니다. 은빛·황금은 한 번뿐." },

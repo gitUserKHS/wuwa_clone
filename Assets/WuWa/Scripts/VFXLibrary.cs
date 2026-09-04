@@ -409,6 +409,77 @@ namespace WuWa
             ps.Play();
         }
 
+        // ---------------------------------------------------------------- water
+        static MaterialPropertyBlock _waterMpb;
+
+        /// Flat expanding ring on the water surface (wake, entry, strokes). Property block, no
+        /// material instances: a swimmer spawns three or four of these a second.
+        public static void SpawnRipple(Vector3 pos, float size, float life, float alpha = 0.5f)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            Object.Destroy(go.GetComponent<Collider>());
+            go.name = "fx_ripple";
+            go.transform.position = pos;
+            go.transform.rotation = Quaternion.Euler(90f, Random.value * 360f, 0f);
+            var mr = go.GetComponent<MeshRenderer>();
+            mr.sharedMaterial = RingMat;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            Runner.StartCoroutine(RippleRoutine(go.transform, mr, size, life, alpha));
+        }
+
+        static IEnumerator RippleRoutine(Transform tr, MeshRenderer mr, float size, float life, float alpha)
+        {
+            if (_waterMpb == null) _waterMpb = new MaterialPropertyBlock();
+            float t = 0f;
+            while (t < life)
+            {
+                if (tr == null) yield break;
+                t += Time.deltaTime;
+                float k = t / life;
+                float ease = 1f - (1f - k) * (1f - k);
+                tr.localScale = Vector3.one * Mathf.Lerp(size * 0.35f, size, ease);
+                _waterMpb.SetColor(BaseColorId, new Color(0.85f, 1f, 1f, alpha * (1f - k)));
+                mr.SetPropertyBlock(_waterMpb);
+                yield return null;
+            }
+            if (tr != null) Object.Destroy(tr.gameObject);
+        }
+
+        /// Entry / stroke splash: two rings and a cone of droplets that fall back.
+        public static void SpawnSplash(Vector3 pos, float scale)
+        {
+            SpawnRipple(pos, 2.2f * scale, 0.7f, 0.45f);
+            SpawnRipple(pos, 1.3f * scale, 0.5f, 0.35f);
+            var ps = NewPs("fx_splash", pos, AddMat);
+            ps.transform.rotation = Quaternion.Euler(-90f, 0f, 0f);
+            var main = ps.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(0.35f, 0.7f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(2.5f * scale, 5f * scale);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.035f, 0.10f);
+            main.gravityModifier = 1.1f;
+            var col = ps.colorOverLifetime; col.enabled = true; col.color = Grad(new Color(0.55f, 0.72f, 0.8f));
+            var em = ps.emission; em.enabled = true;
+            em.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)Mathf.Clamp(14f * scale, 6f, 36f)) });
+            var shape = ps.shape; shape.enabled = true; shape.shapeType = ParticleSystemShapeType.Cone; shape.angle = 35f; shape.radius = 0.35f * scale;
+            ps.Play();
+        }
+
+        /// A puff of rising air bubbles (diving, underwater dash).
+        public static void SpawnBubbles(Vector3 pos, int n, float rise = 1.2f)
+        {
+            var ps = NewPs("fx_bubbles", pos, AddMat);
+            var main = ps.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(0.8f, 1.6f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(0.2f, 0.6f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.09f);
+            main.gravityModifier = -rise * 0.12f;
+            var col = ps.colorOverLifetime; col.enabled = true; col.color = Grad(new Color(0.75f, 0.92f, 1f));
+            var em = ps.emission; em.enabled = true;
+            em.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)Mathf.Clamp(n, 1, 60)) });
+            var shape = ps.shape; shape.enabled = true; shape.shapeType = ParticleSystemShapeType.Sphere; shape.radius = 0.25f;
+            ps.Play();
+        }
+
         public static void SpawnDashGhost(PlayerController player, Color c)
         {
             Runner.StartCoroutine(DashGhostRoutine(player, c));

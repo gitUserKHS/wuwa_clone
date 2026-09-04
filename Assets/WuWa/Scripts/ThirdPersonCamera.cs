@@ -182,7 +182,7 @@ namespace WuWa
                 (Mathf.PerlinNoise(t, 3.1f) - 0.5f) * 5.5f * tr);
 
             Vector3 pos = pivot - rot * Vector3.forward * _curDistance + rot * _shakeOffset;
-            if (_player != null && _player.IsSwimming) pos.y = Mathf.Max(pos.y, WorldRegions.WaterY + 0.3f);
+            if (_player != null && _player.IsSwimming && !_player.IsDiving) pos.y = Mathf.Max(pos.y, WorldRegions.WaterY + 0.3f);
             transform.position = pos;
             transform.rotation = rot * shakeRot;
 

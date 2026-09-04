@@ -97,7 +97,9 @@ namespace WuWa
             // mirror-lake basin sinks below the waterline
             float lk = LakeM(x, z);
             float scoop = S(0.15f, 0.9f, lk) * open;
-            h = Mathf.Lerp(h, -3.8f + Mathf.PerlinNoise(x * 0.05f + 2.2f, z * 0.05f + 6.6f) * 0.9f, scoop);
+            // a -3.8 m shelf near the shore, dropping to about -10 m in the middle: room to dive
+            float bed = -3.8f - 6.5f * S(0.45f, 1f, lk) + Mathf.PerlinNoise(x * 0.05f + 2.2f, z * 0.05f + 6.6f) * 0.9f;
+            h = Mathf.Lerp(h, bed, scoop);
 
             // songless ruins sit on gentle terraces
             h = Mathf.Lerp(h, h * 0.5f + 1.4f, RuinsM(x, z) * open * 0.75f);

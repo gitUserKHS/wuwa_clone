@@ -167,6 +167,17 @@ namespace WuWa
                 else WuWaUtil.Fade(_anim, stIdle, 0.25f);
             }
 
+            // enemies do not follow into deep water: diving is the player's escape
+            if (move.sqrMagnitude > 0.01f)
+            {
+                Vector3 ahead = transform.position + move.normalized * 0.9f;
+                if (WorldRegions.HeightAt(ahead.x, ahead.z) < WorldRegions.WaterY - 0.6f)
+                {
+                    move = Vector3.zero;
+                    WuWaUtil.Fade(_anim, stIdle, 0.25f);
+                }
+            }
+
             if (Status != null) move *= Status.MoveMul;   // frost slow
             if (_cc != null && _cc.enabled) _cc.Move((move + Vector3.up * _vy) * dt);
         }

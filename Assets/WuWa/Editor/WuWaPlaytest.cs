@@ -18,6 +18,7 @@ namespace WuWa.EditorTools
         const string KeyStep = "WuWaPlaytest.step";
         const string KeyFrame = "WuWaPlaytest.frame";
         const string KeyActive = "WuWaPlaytest.active";
+        const string KeyMode = "WuWaPlaytest.mode";
 
         static float _fpsAccum;
         static int _fpsFrames;
@@ -45,9 +46,20 @@ namespace WuWa.EditorTools
             SessionState.SetInt(KeyStep, 0);
             SessionState.SetInt(KeyFrame, 0);
             SessionState.SetInt(KeyActive, 0);
+            SessionState.SetString(KeyMode, "");
             EditorSceneManager.OpenScene("Assets/WuWa/Scenes/WuWaField.unity");
             EditorApplication.isPlaying = true;
             return "playtest queued -> " + outDir;
+        }
+
+        /// Water scenario: continue the save, drop the party into the middle of the lake and walk
+        /// through tread / stroke / dash / dive / underwater dash / resurface / exhaustion with
+        /// framed shots, screen captures (post-processing, fog) and a state report.
+        public static string RunSwim(string outDir)
+        {
+            string r = Run(outDir);
+            SessionState.SetString(KeyMode, "swim");
+            return r + " (swim)";
         }
 
         static void Update()
@@ -93,6 +105,7 @@ namespace WuWa.EditorTools
 
             // settle: let the scene stream in and the animators reach a steady state
             if (frame < 500) return;
+            if (SessionState.GetString(KeyMode, "") == "swim") { SwimUpdate(dir, frame - 500); return; }
 
             var team = Object.FindFirstObjectByType<TeamManager>();
             if (team == null)
@@ -218,6 +231,87 @@ namespace WuWa.EditorTools
                 Report.Add(slot + ": run" + (phase == 700 ? "A" : "B") + " " + GripReport(m) + " tipY=" + BladeTipHeight(m).ToString("F2"));
                 if (phase == 760) PlayerController.SpeedPoseOverride = -1f;
             }
+        }
+
+        static void SwimUpdate(string dir, int f)
+        {
+            var pc = PlayerController.Instance;
+            if (pc == null) { Finish(dir, "no PlayerController"); return; }
+            var t = pc.transform;
+            if (f == 0)
+            {
+                var cc = pc.GetComponent<CharacterController>();
+                if (cc != null) cc.enabled = false;
+                t.position = new Vector3(390f, WorldRegions.WaterY + 0.3f, -100f);
+                t.rotation = Quaternion.identity;
+                if (cc != null) cc.enabled = true;
+                Report.Add("swim: dropped at the lake centre, bed=" + WorldRegions.HeightAt(390f, -100f).ToString("F2") + " waterY=" + WorldRegions.WaterY);
+            }
+            else if (f == 120) Snap(dir, pc, "tread");
+            else if (f == 125) InputService.DbgMove = new Vector2(0f, 1f);
+            else if (f == 260) Snap(dir, pc, "swim");
+            else if (f == 265) PlayerController.DebugSwimDash = true;
+            else if (f == 380) Snap(dir, pc, "dash");
+            else if (f == 385) { PlayerController.DebugSwimDash = false; InputService.DbgMove = Vector2.zero; PlayerController.DebugDive = 1; }
+            else if (f == 500) Snap(dir, pc, "dive");
+            else if (f == 505) { PlayerController.DebugDive = -1; InputService.DbgMove = new Vector2(0f, 1f); PlayerController.DebugSwimDash = true; }
+            else if (f == 620) Snap(dir, pc, "divedash");
+            else if (f == 625) { InputService.DbgMove = Vector2.zero; PlayerController.DebugSwimDash = false; PlayerController.DebugDive = 2; }
+            else if (f == 1500) { Snap(dir, pc, "surface"); PlayerController.DebugDive = -1; }       // expect dive=False
+            else if (f == 1505) ForceStamina(pc, 0f);                                              // no breath on the surface
+            else if (f == 1650) Snap(dir, pc, "exhausted");                                        // expect dive=True (sank, not drowned)
+            else if (f == 1655)
+            {
+                // the way out: a shelf 6 m inside the east shore, camera looking at the bank
+                ForceStamina(pc, 240f);
+                float xs = 390f;
+                while (xs < 700f && WorldRegions.HeightAt(xs, -100f) < WorldRegions.WaterY - 1.05f) xs += 2f;
+                var cc = pc.GetComponent<CharacterController>();
+                if (cc != null) cc.enabled = false;
+                t.position = new Vector3(xs - 6f, WorldRegions.WaterY - 0.9f, -100f);
+                if (cc != null) cc.enabled = true;
+                var cam = Object.FindFirstObjectByType<ThirdPersonCamera>();
+                var yaw = cam != null ? typeof(ThirdPersonCamera).GetField("_yaw", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance) : null;
+                if (yaw != null) yaw.SetValue(cam, 90f);
+                PlayerController.DebugDive = 2;
+                Report.Add("shore: shelf edge x=" + xs + " bed=" + WorldRegions.HeightAt(xs - 6f, -100f).ToString("F2"));
+            }
+            else if (f == 2000) { PlayerController.DebugDive = -1; InputService.DbgMove = new Vector2(0f, 1f); }
+            else if (f == 2100) Snap(dir, pc, "toshore");
+            else if (f == 3000) Snap(dir, pc, "ashore");                                           // expect swim=False
+            else if (f == 3005) Finish(dir, "ok");
+        }
+
+        static void Snap(string dir, PlayerController pc, string tag)
+        {
+            var t = pc.transform;
+            string stem = Path.Combine(dir, "swim_" + tag);
+            Shot(t, stem + "_quarter.png", 2.8f, 1.2f, 0.6f, 1000, 1000, 40f);
+            Shot(t, stem + "_side.png", 3.0f, 0.7f, 0.5f, 1200, 900, 90f);
+            ScreenCapture.CaptureScreenshot(stem + "_screen.png");
+            Report.Add(tag + ": " + SwimReport(pc));
+        }
+
+        static string SwimReport(PlayerController pc)
+        {
+            var fx = UnderwaterFX.I;
+            var cam = Camera.main;
+            var lpf = cam != null ? cam.GetComponent<AudioLowPassFilter>() : null;
+            var info = pc.Anim != null ? pc.Anim.GetCurrentAnimatorStateInfo(0) : default(AnimatorStateInfo);
+            string state = pc.Anim == null ? "-" : info.IsName("Swim") ? "Swim" : info.IsName("Loco") ? "Loco" : info.IsName("Fall") ? "Fall" : "other";
+            return string.Format("swim={0} dive={1} grounded={12} state={13} depth={2:F2} planar={3:F1} vy={4:F1} blend={5:F2} stamina={6:F0} pitch={7:F0} wet={8:F2} fog={9} camY={10:F2} lpf={11} pos=({14:F0},{15:F0})",
+                pc.IsSwimming, pc.IsDiving, WorldRegions.WaterY - pc.transform.position.y, pc.PlanarSpeed, pc.VerticalSpeed,
+                pc.SwimBlend, pc.Stamina, pc.ModelPitch, fx != null ? fx.Wet : -1f, RenderSettings.fogColor.ToString("F2"),
+                cam != null ? cam.transform.position.y : 0f, lpf != null && lpf.enabled ? lpf.cutoffFrequency.ToString("F0") : "off",
+                pc.IsGrounded, state, pc.transform.position.x, pc.transform.position.z);
+        }
+
+        static void ForceStamina(PlayerController pc, float v)
+        {
+            var st = typeof(PlayerController).GetProperty("Stamina");
+            var ex = typeof(PlayerController).GetProperty("StaminaExhausted");
+            st.GetSetMethod(true).Invoke(pc, new object[] { v });
+            ex.GetSetMethod(true).Invoke(pc, new object[] { v <= 0.01f });
         }
 
         /// Height of the blade tip above the character root, metres (negative = below the feet).
@@ -363,6 +457,11 @@ namespace WuWa.EditorTools
         static void Finish(string dir, string status)
         {
             PlayerController.CombatPoseOverride = -1;
+            PlayerController.SpeedPoseOverride = -1f;
+            PlayerController.DebugSwimDash = false;
+            PlayerController.DebugDive = -1;
+            InputService.DbgMove = Vector2.zero;
+            SessionState.SetString(KeyMode, "");
             SessionState.SetString(KeyDir, "");
             File.WriteAllText(Path.Combine(dir, "report.txt"),
                 "status: " + status + "\n" + string.Join("\n", Report.ToArray()) + "\n");

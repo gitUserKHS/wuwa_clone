@@ -68,3 +68,7 @@ Thumbs.db
 /Assets/WuWa/Anim/Clips/*
 !/Assets/WuWa/Anim/Clips/Fist.anim
 !/Assets/WuWa/Anim/Clips/Fist.anim.meta
+!/Assets/WuWa/Anim/Clips/Swim.anim
+!/Assets/WuWa/Anim/Clips/Swim.anim.meta
+!/Assets/WuWa/Anim/Clips/SwimTread.anim
+!/Assets/WuWa/Anim/Clips/SwimTread.anim.meta

@@ -140,6 +140,37 @@ namespace WuWa
             });
         }
 
+        public static AudioClip Splash()
+        {
+            return Get("splash", () =>
+            {
+                var d = NoiseBurst(0.5f, 0.01f, 2.2f, 0.32f, 0.55f);
+                AddSine(d, 260f, 70f, 0.35f, 0.01f, 3f);
+                SoftClip(d); return d;
+            });
+        }
+
+        /// One breaststroke: a soft, low swoosh of water.
+        public static AudioClip Stroke()
+        {
+            return Get("stroke", () =>
+            {
+                var d = NoiseBurst(0.55f, 0.12f, 1.6f, 0.10f, 0.32f);
+                AddSine(d, 180f, 120f, 0.08f, 0.1f, 2f);
+                return d;
+            });
+        }
+
+        public static AudioClip Bubble()
+        {
+            return Get("bubble", () =>
+            {
+                var d = NoiseBurst(0.25f, 0.02f, 2f, 0.2f, 0.15f);
+                AddSine(d, 520f, 980f, 0.2f, 0.02f, 2.5f);
+                return d;
+            });
+        }
+
         public static AudioClip Skill()
         {
             return Get("skill", () =>

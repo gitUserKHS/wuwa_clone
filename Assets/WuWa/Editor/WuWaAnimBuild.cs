@@ -183,6 +183,8 @@ namespace WuWa.EditorTools
 
             // members carry a drawn sword: relaxed/guard idles, Speed x Combat loco, right-hand fist
             Debug.Log("[WuWa] sword pose: " + ApplySwordPose());
+            // water: procedural tread / breaststroke clips and the Swim blend state
+            Debug.Log("[WuWa] swim pose: " + ApplySwimPose());
 
             AssetDatabase.SaveAssets();
             Debug.Log("[WuWa] animator controllers built");
@@ -493,6 +495,159 @@ namespace WuWa.EditorTools
                 mask.SetHumanoidBodyPartActive((AvatarMaskBodyPart)i, i == (int)AvatarMaskBodyPart.RightFingers);
             EditorUtility.SetDirty(mask);
             return mask;
+        }
+
+        // ---------------------------------------------------------------- swim pose
+        // No pack ships a swim, so the water clips are authored here as humanoid muscle curves:
+        // treading water (upright, sculling arms, cycling legs) and a breaststroke (prone, root
+        // pitched 62 deg, arms glide-sweep-recover, frog kick). The Swim state blends them on
+        // Speed: 0 tread, 0.5 stroke, 1 the same stroke at 1.6x for the dash. Root position and
+        // rotation are baked into the pose so they survive applyRootMotion = false. Muscle sign
+        // convention: -1 is the first word of the name, +1 the second (Arm Down-Up: +1 = up).
+
+        static AnimationCurve K(params float[] tv)
+        {
+            var keys = new Keyframe[tv.Length / 2];
+            for (int i = 0; i < keys.Length; i++) keys[i] = new Keyframe(tv[i * 2], tv[i * 2 + 1]);
+            var c = new AnimationCurve(keys);
+            for (int i = 0; i < keys.Length; i++) c.SmoothTangents(i, 0f);
+            return c;
+        }
+
+        static void Both(Dictionary<string, AnimationCurve> d, string suffix, AnimationCurve c)
+        {
+            d["Left " + suffix] = c;
+            d["Right " + suffix] = c;
+        }
+
+        static AnimationClip WriteMuscleClip(string name, float length, Dictionary<string, AnimationCurve> curves, Vector3 rootT, float pitchDeg)
+        {
+            string path = ClipDir + "/" + name + ".anim";
+            var clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(path);
+            if (clip == null)
+            {
+                clip = new AnimationClip { name = name, frameRate = 30f };
+                AssetDatabase.CreateAsset(clip, path);
+            }
+            clip.ClearCurves();
+            foreach (var kv in curves)
+                AnimationUtility.SetEditorCurve(clip, EditorCurveBinding.FloatCurve("", typeof(Animator), kv.Key), kv.Value);
+            var q = Quaternion.AngleAxis(pitchDeg, Vector3.right);
+            var root = new Dictionary<string, float>
+            {
+                { "RootT.x", rootT.x }, { "RootT.y", rootT.y }, { "RootT.z", rootT.z },
+                { "RootQ.x", q.x }, { "RootQ.y", q.y }, { "RootQ.z", q.z }, { "RootQ.w", q.w },
+            };
+            foreach (var kv in root)
+                AnimationUtility.SetEditorCurve(clip, EditorCurveBinding.FloatCurve("", typeof(Animator), kv.Key), AnimationCurve.Constant(0f, length, kv.Value));
+            var s = AnimationUtility.GetAnimationClipSettings(clip);
+            s.loopTime = true;
+            s.loopBlend = true;
+            s.loopBlendOrientation = true;
+            s.loopBlendPositionY = true;
+            s.loopBlendPositionXZ = true;
+            s.keepOriginalOrientation = true;
+            s.keepOriginalPositionY = true;
+            s.keepOriginalPositionXZ = true;
+            AnimationUtility.SetAnimationClipSettings(clip, s);
+            EditorUtility.SetDirty(clip);
+            return clip;
+        }
+
+        /// Treading water: upright with a slight lean back, arms sculling just under the surface,
+        /// legs cycling. Root 0.54 (hips ~0.48 m above the swim root = shoulders at the surface).
+        static AnimationClip BuildTreadClip()
+        {
+            const float L = 2.0f;
+            var d = new Dictionary<string, AnimationCurve>();
+            d["Neck Nod Down-Up"] = K(0f, 0.3f, L, 0.3f);
+            d["Head Nod Down-Up"] = K(0f, 0.45f, L, 0.45f);
+            d["Spine Front-Back"] = K(0f, 0.05f, L, 0.05f);
+            Both(d, "Arm Down-Up", K(0f, -0.05f, 0.5f, -0.2f, 1f, -0.05f, 1.5f, -0.2f, L, -0.05f));
+            d["Left Arm Front-Back"] = K(0f, -0.35f, 0.5f, -0.05f, 1f, -0.35f, 1.5f, -0.05f, L, -0.35f);
+            d["Right Arm Front-Back"] = K(0f, -0.05f, 0.5f, -0.35f, 1f, -0.05f, 1.5f, -0.35f, L, -0.05f);
+            Both(d, "Forearm Stretch", K(0f, -0.35f, L, -0.35f));
+            Both(d, "Hand Down-Up", K(0f, 0f, L, 0f));
+            Both(d, "Shoulder Down-Up", K(0f, 0.15f, L, 0.15f));
+            d["Left Upper Leg Front-Back"] = K(0f, -0.55f, 0.5f, -0.15f, 1f, -0.55f, 1.5f, -0.15f, L, -0.55f);
+            d["Right Upper Leg Front-Back"] = K(0f, -0.15f, 0.5f, -0.55f, 1f, -0.15f, 1.5f, -0.55f, L, -0.15f);
+            Both(d, "Upper Leg In-Out", K(0f, 0.25f, L, 0.25f));
+            d["Left Lower Leg Stretch"] = K(0f, -0.8f, 0.5f, -0.3f, 1f, -0.8f, 1.5f, -0.3f, L, -0.8f);
+            d["Right Lower Leg Stretch"] = K(0f, -0.3f, 0.5f, -0.8f, 1f, -0.3f, 1.5f, -0.8f, L, -0.3f);
+            Both(d, "Foot Up-Down", K(0f, 0.3f, L, 0.3f));
+            return WriteMuscleClip("SwimTread", L, d, new Vector3(0f, 0.54f, 0f), -8f);
+        }
+
+        /// Breaststroke: glide (0) -> outsweep (0.3) -> pull to the chest (0.55) -> recover (0.85)
+        /// -> extend (1.1) -> glide (1.4); legs tuck during the recovery and kick out on the extend.
+        /// Root 0.82 up (hips 0.22 m under the surface), pitched 62 deg so the head clears the water.
+        static AnimationClip BuildSwimClip()
+        {
+            const float L = 1.4f;
+            var d = new Dictionary<string, AnimationCurve>();
+            d["Neck Nod Down-Up"] = K(0f, 0.55f, L, 0.55f);
+            d["Head Nod Down-Up"] = K(0f, 0.8f, L, 0.8f);
+            d["Spine Front-Back"] = K(0f, 0.25f, L, 0.25f);
+            d["Chest Front-Back"] = K(0f, 0.15f, L, 0.15f);
+            Both(d, "Arm Down-Up", K(0f, 1.0f, 0.3f, 0.55f, 0.55f, -0.25f, 0.85f, -0.15f, 1.1f, 0.6f, L, 1.0f));
+            Both(d, "Arm Front-Back", K(0f, -0.15f, 0.3f, -0.2f, 0.55f, -0.75f, 0.85f, -0.85f, 1.1f, -0.45f, L, -0.15f));
+            Both(d, "Forearm Stretch", K(0f, 0.1f, 0.3f, -0.1f, 0.55f, -0.9f, 0.85f, -1.0f, 1.1f, -0.4f, L, 0.1f));
+            Both(d, "Hand Down-Up", K(0f, 0f, L, 0f));
+            Both(d, "Shoulder Down-Up", K(0f, 0.4f, 0.55f, 0f, L, 0.4f));
+            Both(d, "Upper Leg Front-Back", K(0f, 0.05f, 0.4f, 0.05f, 0.7f, -0.55f, 0.95f, -0.45f, 1.2f, 0f, L, 0.05f));
+            Both(d, "Upper Leg In-Out", K(0f, 0.05f, 0.4f, 0.05f, 0.7f, 0.35f, 0.95f, 0.7f, 1.2f, 0.1f, L, 0.05f));
+            Both(d, "Lower Leg Stretch", K(0f, 0.05f, 0.4f, 0.05f, 0.7f, -0.9f, 0.95f, -0.7f, 1.2f, 0f, L, 0.05f));
+            Both(d, "Foot Up-Down", K(0f, 0.6f, 0.4f, 0.6f, 0.7f, -0.5f, 0.95f, -0.4f, 1.2f, 0.6f, L, 0.6f));
+            return WriteMuscleClip("Swim", L, d, new Vector3(0f, 0.82f, 0f), 62f);
+        }
+
+        static void EnsureSwimState(AnimatorController ctrl, AnimationClip tread, AnimationClip swim)
+        {
+            var sm = ctrl.layers[0].stateMachine;
+            AnimatorState st = null;
+            foreach (var cs in sm.states) if (cs.state.name == "Swim") st = cs.state;
+            if (st == null) st = sm.AddState("Swim");
+            var tree = st.motion as BlendTree;
+            if (tree == null)
+            {
+                tree = new BlendTree { name = "Swim", hideFlags = HideFlags.HideInHierarchy };
+                AssetDatabase.AddObjectToAsset(tree, ctrl);
+                st.motion = tree;
+            }
+            tree.blendType = BlendTreeType.Simple1D;
+            tree.blendParameter = "Speed";
+            tree.useAutomaticThresholds = false;
+            tree.children = new[]
+            {
+                new ChildMotion { motion = tread, threshold = 0f, timeScale = 1f },
+                new ChildMotion { motion = swim, threshold = 0.5f, timeScale = 1f },
+                new ChildMotion { motion = swim, threshold = 1f, timeScale = 1.6f },
+            };
+            EditorUtility.SetDirty(tree);
+        }
+
+        [MenuItem("WuWa/Anim/Apply swim pose")]
+        public static void ApplySwimPoseMenu() { Debug.Log(ApplySwimPose()); }
+
+        /// Idempotent; BuildAll calls it, and it can be re-run alone after tuning the clips.
+        public static string ApplySwimPose()
+        {
+            WuWaImportTools.EnsureFolder(AnimDir);
+            WuWaImportTools.EnsureFolder(ClipDir);
+            var tread = BuildTreadClip();
+            var swim = BuildSwimClip();
+            var sb = new System.Text.StringBuilder();
+            for (int m = 0; m < 3; m++)
+            {
+                string path = AnimDir + "/Member" + m + ".controller";
+                var ctrl = AssetDatabase.LoadAssetAtPath<AnimatorController>(path);
+                if (ctrl == null) { sb.Append("missing " + path + "\n"); continue; }
+                EnsureSwimState(ctrl, tread, swim);
+                EditorUtility.SetDirty(ctrl);
+                sb.Append("Member" + m + ": Swim state ok\n");
+            }
+            AssetDatabase.SaveAssets();
+            return sb.ToString();
         }
 
         /// Read a controller's state clip length (used when baking AttackDefs).

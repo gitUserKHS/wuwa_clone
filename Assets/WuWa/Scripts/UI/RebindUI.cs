@@ -12,7 +12,7 @@ namespace WuWa
     {
         static readonly Dictionary<string, string> Labels = new Dictionary<string, string>
         {
-            { "Player/Jump", "점프 / 활공(홀드)" }, { "Player/Dodge", "회피 / 질주(홀드)" }, { "Player/Sprint", "질주 (전용)" },
+            { "Player/Jump", "점프 / 활공(홀드)" }, { "Player/Dodge", "회피 / 질주(홀드)" }, { "Player/Sprint", "질주 (전용) · 물에서 잠수/하강" },
             { "Player/Attack", "일반 공격 / 강공격(홀드)" }, { "Player/HeavyAttack", "강공격 (전용 키)" }, { "Player/Skill", "공명 스킬" },
             { "Player/Liberation", "공명 해방" }, { "Player/EchoSkill", "에코 스킬" }, { "Player/Swap1", "교대 1" }, { "Player/Swap2", "교대 2" }, { "Player/Swap3", "교대 3" },
             { "Player/QuickItem", "퀵 아이템" }, { "Player/Flask", "공명의 물약" }, { "Player/Interact", "상호작용" }, { "Player/Grapple", "갈고리" },

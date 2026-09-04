@@ -240,6 +240,7 @@ namespace WuWa
             string move = InputService.GamepadActive ? "좌스틱" : "WASD";
             return "이동 " + move + " · 회피 " + Glyph.Key("Player/Dodge", "Shift") + " (홀드=질주)\n" +
                    "점프 " + Glyph.Key("Player/Jump", "Space") + " ×2 · 공중 홀드=활공 · 벽으로 달리면 벽타기\n" +
+                   "수영: 스태미나 소모 · " + Glyph.Key("Player/Sprint", "Ctrl") + " 잠수/하강 · " + Glyph.Key("Player/Jump", "Space") + " 상승 · 홀드 " + Glyph.Key("Player/Dodge", "Shift") + " 대시 (물속 산소 무제한)\n" +
                    "공격 " + Glyph.Key("Player/Attack", "좌클릭") + " (홀드=강공격 · 회로 가득 시 강화)\n" +
                    "공중 공격=낙하 강타 · 회피 직후 공격=대시 공격\n" +
                    Glyph.Key("Player/Skill", "E") + " 스킬 · " + Glyph.Key("Player/Liberation", "R") + " 해방 · " + Glyph.Key("Player/EchoSkill", "Q") + " 에코 · " + Glyph.Key("Player/Grapple", "T") + " 갈고리\n" +

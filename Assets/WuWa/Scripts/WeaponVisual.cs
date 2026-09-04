@@ -9,9 +9,20 @@ namespace WuWa
     {
         TeamManager _team;
         readonly Dictionary<int, GameObject> _attached = new Dictionary<int, GameObject>();
+        static WeaponVisual _inst;
+        bool _hidden;
+
+        /// Sheathes the visuals (WuWa hides weapons in the water).
+        public static void SetHidden(bool hidden)
+        {
+            if (_inst == null) return;
+            _inst._hidden = hidden;
+            foreach (var kv in _inst._attached) if (kv.Value != null) kv.Value.SetActive(!hidden);
+        }
 
         void Start()
         {
+            _inst = this;
             _team = GetComponent<TeamManager>();
             if (_team != null) _team.OnTeamChanged += Rebuild;
             if (WeaponSystem.I != null) WeaponSystem.I.OnChanged += Rebuild;
@@ -20,6 +31,7 @@ namespace WuWa
 
         void OnDestroy()
         {
+            if (_inst == this) _inst = null;
             if (_team != null) _team.OnTeamChanged -= Rebuild;
             if (WeaponSystem.I != null) WeaponSystem.I.OnChanged -= Rebuild;
         }
@@ -58,6 +70,7 @@ namespace WuWa
                     sword.transform.localPosition = new Vector3(-0.055f, 0.035f, -0.01f);
                     sword.transform.localRotation = Quaternion.Euler(0f, 90f, -90f);
                 }
+                sword.SetActive(!_hidden);
                 _attached[i] = sword;
             }
         }
